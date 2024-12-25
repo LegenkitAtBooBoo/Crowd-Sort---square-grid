@@ -37,4 +37,9 @@ public class PoolManager : Singleton<PoolManager>
             v.transform.parent = instance.transform;
         }
     }
+    public static void ReturnPeople(People people)
+    {
+        people.gameObject.SetActive(false);
+        people.transform.parent = instance.transform;
+    }
 }

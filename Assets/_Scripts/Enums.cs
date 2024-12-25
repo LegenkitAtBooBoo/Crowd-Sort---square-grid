@@ -6,3 +6,9 @@ public enum CrowdType
     Yellow,
     Green,
 }
+public enum CellType
+{
+    Normal,
+    Generator,
+    Storage,
+}

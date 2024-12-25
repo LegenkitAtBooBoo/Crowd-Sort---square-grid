@@ -1,8 +1,10 @@
 using System.Collections;
+using System.Linq;
 using System.Collections.Generic;
 using UnityEditor.iOS;
 using UnityEngine;
 
+[DefaultExecutionOrder(-1000)]
 public class GameManager : Singleton<GameManager>
 {
     #region Set
@@ -22,14 +24,17 @@ public class GameManager : Singleton<GameManager>
     public Vector2 PeoplePadding;
     [SerializeField] GameObject CellObj;
     [SerializeField] GameObject crowdTile;
-    [SerializeField] GridCell GeneratorCell;
-    [SerializeField] GridCell ProviderCell;
+    GridCell GeneratorCell;
+    GridCell ProviderCell;
     #endregion
 
     #region Colleciton
     [Header("Level")]
     public List<CrowdType> CrowdsInLevel = new List<CrowdType>();
     public Dictionary<Vector2Int, GridCell> CellDic = new Dictionary<Vector2Int, GridCell>();
+
+    public List<GridCell> StorageCells = new List<GridCell>();
+    public List<CrowdTile> CompletedTile = new List<CrowdTile>();
     #endregion
 
     #region Properties
@@ -89,16 +94,37 @@ public class GameManager : Singleton<GameManager>
     }
     void InitializeGrid()
     {
-        foreach (var v in GameObject.FindObjectsOfType<GridCell>())
+        foreach (var v in FindObjectsOfType<GridCell>())
         {
             CellDic.Add(v.SetID(CellSize, PositionOffset), v);
             Debug.Log(CellDic.Count + " - " + v.CellID.ToString());
         }
     }
+
+    public void SubscribeCells(GridCell cell)
+    {
+        if (cell.Type == CellType.Storage)
+        {
+            StorageCells.Add(cell);
+        }
+        if (cell.Type == CellType.Generator)
+        {
+            if (cell.SetID(CellSize, PositionOffset).x == 0)
+            {
+                ProviderCell = cell;
+            }
+            else
+            {
+                GeneratorCell = cell;
+            }
+        }
+    }
     private void Start()
     {
         SpawnTile(true);
+        StorageCells.Sort((a, b) => a.CellID.x - b.CellID.x);
     }
+
     #endregion
 
     #region Updation
@@ -137,7 +163,7 @@ public class GameManager : Singleton<GameManager>
     }
     void MoveTileTo(Vector2Int ID)
     {
-        if (!CellDic.ContainsKey(ID) || !ReadyTile)
+        if (!CellDic.ContainsKey(ID) || CellDic[ID].Type != CellType.Normal)
         {
             return;
         }
@@ -158,36 +184,6 @@ public class GameManager : Singleton<GameManager>
 
     #endregion
 
-    #region Public Methods
-    public void SwitchGeneratedTiles()
-    {
-        ProviderCell.ReplaceTile(GeneratorCell.ReplaceTile(ReadyTile));
-    }
-    public static List<Crowd> NewCrowdSet()
-    {
-        List<Crowd> Temp = new List<Crowd>();
-        int Length = Random.Range(1, 6);
-        int Count = Random.Range(1, Mathf.Min(6, Length, instance.CrowdsInLevel.Count));
-        int populationPerCrowd = Length / Count;
-        int remainingLength = Length - populationPerCrowd * Count;
-        List<CrowdType> TempCrowd = new List<CrowdType>();
-        TempCrowd.AddRange(instance.CrowdsInLevel);
-        for (int i = 0; i < Count; i++)
-        {
-            int x = Random.Range(0, TempCrowd.Count);
-            Crowd crowd = new Crowd(TempCrowd[x], populationPerCrowd);
-            if (remainingLength > 0)
-            {
-                crowd++;
-                remainingLength--;
-            }
-            Temp.Add(crowd);
-            TempCrowd.RemoveAt(x);
-        }
-        return Temp;
-    }
-    #endregion
-
     #region Shorting
     public void CheckForShorting(CrowdTile tile)
     {
@@ -197,9 +193,26 @@ public class GameManager : Singleton<GameManager>
         {
             tempTypes.Add(tile.crowds[i].type);
         }
+        Vector2Int ID = tile.CellID;
         for (int i = 0; i < tempTypes.Count; i++)
         {
-            checkNeighbourForCrowd(tile.CellID, tempTypes[i]);
+            checkNeighbourForCrowd(ID, tempTypes[i]);
+        }
+        tile.RepositionPeople();
+        tile.CheckStatus();
+        Vector2Int neighbourID;
+        foreach (var v in NeighboutSet)
+        {
+            neighbourID = ID + v;
+            if (!CellDic.ContainsKey(neighbourID))
+            {
+                continue;
+            }
+            if (CellDic[neighbourID].Tile != null)
+            {
+                CellDic[neighbourID].Tile.RepositionPeople();
+                CellDic[neighbourID].Tile.CheckStatus();
+            }
         }
     }
     void checkNeighbourForCrowd(Vector2Int ID, CrowdType type)
@@ -240,7 +253,7 @@ public class GameManager : Singleton<GameManager>
                 }
             }
         }
-        CrowdTile DominentTile = AplicableTiles[0];
+        /*CrowdTile DominentTile = AplicableTiles[0];
         AplicableTiles.RemoveAt(0);
 
         if (DominentTile != CellDic[ID].Tile)
@@ -248,7 +261,8 @@ public class GameManager : Singleton<GameManager>
             AplicableTiles.Remove(CellDic[ID].Tile);
             AplicableTiles.Insert(0, CellDic[ID].Tile);
         }
-        DominentTile.TakeCrowdFrom(AplicableTiles, type);
+        DominentTile.TakeCrowdFrom(AplicableTiles, type);*/
+        Sort(AplicableTiles, CellDic[ID].Tile, type);
     }
     bool PriorityForExchange(CrowdTile cell1, CrowdTile cell2, CrowdTile mainCell, CrowdType type)
     {
@@ -267,6 +281,67 @@ public class GameManager : Singleton<GameManager>
             return true;
         }
         return false;
+    }
+
+    void Sort(List<CrowdTile> tiles, CrowdTile bridge, CrowdType type)
+    {
+        int TileCount = tiles.Count;
+        int giveIndex = TileCount - 1;
+        People temp;
+        for (int i = 0; i < TileCount && giveIndex > i;)
+        {
+            temp = tiles[giveIndex].RemovePeople(type);
+            if (temp == null)
+            {
+                giveIndex--;
+                continue;
+            }
+            if (!tiles[i].TakePeople(type, temp))
+            {
+                i++;
+                tiles[giveIndex].TakePeople(type, temp);
+            }
+        }
+    }
+    #endregion
+
+    #region Public Methods
+    public void SwitchGeneratedTiles()
+    {
+        ProviderCell.ReplaceTile(GeneratorCell.ReplaceTile(ReadyTile));
+    }
+    public static List<Crowd> NewCrowdSet()
+    {
+        List<Crowd> Temp = new List<Crowd>();
+        int Length = Random.Range(1, 6);
+        int Count = Random.Range(1, Mathf.Min(6, Length, instance.CrowdsInLevel.Count + 1));
+        int populationPerCrowd = Length / Count;
+        int remainingLength = Length - populationPerCrowd * Count;
+        List<CrowdType> TempCrowd = new List<CrowdType>();
+        TempCrowd.AddRange(instance.CrowdsInLevel);
+        for (int i = 0; i < Count; i++)
+        {
+            int x = Random.Range(0, TempCrowd.Count);
+            Crowd crowd = new Crowd(TempCrowd[x], populationPerCrowd);
+            if (remainingLength > 0)
+            {
+                crowd++;
+                remainingLength--;
+            }
+            Temp.Add(crowd);
+            TempCrowd.RemoveAt(x);
+        }
+        return Temp;
+    }
+
+    public void TileCompleted(CrowdTile tile)
+    {
+        if (CompletedTile.Count == StorageCells.Count || CompletedTile.Contains(tile))
+        {
+            return;
+        }
+        StorageCells[CompletedTile.Count].TakeCrowdTile(tile);
+        CompletedTile.Add(tile);
     }
     #endregion
 }
@@ -307,4 +382,3 @@ public class Crowd
         return crowd1;
     }
 }
-

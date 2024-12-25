@@ -5,10 +5,12 @@ using static UnityEngine.Rendering.DebugUI.Table;
 
 public class CrowdTile : MonoBehaviour
 {
-    public List<Crowd> crowds { get; private set; } = new List<Crowd>();
+    
+    public List<Crowd> crowds /*{ get; private set; }*/ = new List<Crowd>();
     List<People> peoples = new List<People>();
-    public bool full => peoples.Count == 6;
-    public bool Complete => full && crowds.Count == 1;
+    public bool Full => peoples.Count == 6;
+    public bool Empty => crowds.Count == 0;
+    public bool Complete => crowds.Count == 1 && Full;
     public Vector2Int CellID { get; private set; }
     public GridCell ParentCell { get; private set; } = null;
 
@@ -47,27 +49,13 @@ public class CrowdTile : MonoBehaviour
         return new Vector3(((float)col - 1f) * GameManager.instance.PeoplePadding.x, 0, (0.5f - row) * GameManager.instance.PeoplePadding.y);
     }
 
-    public void TakeCrowdFrom(List<CrowdTile> tiles, CrowdType type)
+    public bool TakePeople(CrowdType type, People people)
     {
-        /*for (int i = 0; i < tiles.Count; i++)
+        if (Full)
         {
-            while (!full && tiles[i].GivePeople(type, out People p))
-            {
-                AddPeople(type, p);
-            }
-            if (full)
-            {
-                return;
-            }
-        }*/
-        StartCoroutine(StartTakingPeopleFromNeighbour(tiles,type));
-    }
-    void AddPeople(CrowdType type, People people)
-    {
-        if (full)
-        {
-            return;
+            return false;
         }
+        bool added = false;
         foreach (var v in crowds)
         {
             if (v.type == type)
@@ -75,72 +63,78 @@ public class CrowdTile : MonoBehaviour
                 v.amount++;
                 v.people.Add(people);
                 peoples.Add(people);
+                added = true;
             }
         }
-        people.MoveTo(transform, PositionOf(peoples.Count - 1));
+        if (!added)
+        {
+            var c = new Crowd(type, 1);
+            c.people.Add(people);
+            peoples.Add(people);
+            crowds.Add(c);
+
+        }        
+        return true;
+    }
+    public People RemovePeople(CrowdType type)
+    {
         if (Complete)
         {
-            this.wait(() =>
-            {
-                DestroySelf();
-            }, 0.5f);
+            return null;
         }
-    }
-    public bool GivePeople(CrowdType type, out People people)
-    {
         foreach (var v in crowds)
         {
             if (v.type == type)
             {
                 v.amount--;
-                people = v.people[v.amount];
-                v.people.Remove(people);
-                peoples.Remove(people);
+                var p = v.people[0];
+                v.people.RemoveAt(0);
+                peoples.Remove(p);
                 if (v.amount == 0)
                 {
                     crowds.Remove(v);
-                    if (crowds.Count == 0)
-                    {
-                        this.waitFrame(() =>
-                        {
-                            DestroySelf();
-                        }, 2);
-                    }
                 }
-                RepositionPeople();
-                return true;
+                return p;
             }
         }
-        people = null;
-        return false;
+        return null;
     }
 
-    void RepositionPeople()
+    public void RepositionPeople()
     {
+        peoples.Clear();
+        foreach (var p in crowds)
+        {
+            peoples.AddRange(p.people);
+        }
         for (int i = 0; i < peoples.Count; i++)
         {
-            peoples[i].MoveTo(PositionOf(i));
+            peoples[i].MoveTo(transform, PositionOf(i));
         }
     }
-
+    public void CheckStatus()
+    {
+        if (Empty)
+        {
+            this.waitFrame(() =>
+            {
+                DestroySelf();
+            }, 2);
+        }
+        if (Complete)
+        {
+            GameManager.instance.TileCompleted(this);            
+        }
+    }
     void DestroySelf()
     {
         ParentCell.TileMoved(this);
         PoolManager.ReturnPeople(peoples);
+        peoples.Clear();
+        //gameObject.SetActive(false);
         Destroy(gameObject);
     }
 
-    IEnumerator StartTakingPeopleFromNeighbour(List<CrowdTile> tiles, CrowdType type)
-    {
-        for (int i = 0; i < tiles.Count; i++)
-        {
-            while (!full && tiles[i].GivePeople(type, out People p))
-            {
-                AddPeople(type, p);
-                yield return new WaitForSeconds(0.05f);
-            }
-        }
-    }
     IEnumerator RepositionTile()
     {
         Vector3 start = transform.localPosition;

@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class GridCell : MonoBehaviour
-{
+{    
+    public CellType Type;
     [SerializeField] MeshRenderer Renderer;
     #region Properties
     [SerializeField] Vector2Int cellID;
@@ -13,6 +14,14 @@ public class GridCell : MonoBehaviour
     public CrowdTile Tile { get; set; } = null;
     public bool Available => Tile == null;
     #endregion
+
+    private void OnEnable()
+    {
+        if(Type != CellType.Normal)
+        {
+            GameManager.instance.SubscribeCells(this);
+        }
+    }
 
     public Vector2Int SetID(Vector2 CellSize, Vector2 offset)
     {
