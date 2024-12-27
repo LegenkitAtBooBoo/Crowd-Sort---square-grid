@@ -1,18 +1,23 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using static UnityEngine.Rendering.DebugUI.Table;
 
 public class CrowdTile : MonoBehaviour
 {
-    
-    public List<Crowd> crowds /*{ get; private set; }*/ = new List<Crowd>();
+
+    #region COLLECTION
+    public List<Crowd> crowds { get; private set; } = new List<Crowd>();
     List<People> peoples = new List<People>();
+    #endregion
+
+    #region PROPERTIES
     public bool Full => peoples.Count == 6;
     public bool Empty => crowds.Count == 0;
     public bool Complete => crowds.Count == 1 && Full;
     public Vector2Int CellID { get; private set; }
     public GridCell ParentCell { get; private set; } = null;
+    public CrowdType Priority { get; private set; }
+    #endregion
 
     public void InitTile(GridCell parent)
     {
@@ -73,7 +78,7 @@ public class CrowdTile : MonoBehaviour
             peoples.Add(people);
             crowds.Add(c);
 
-        }        
+        }
         return true;
     }
     public People RemovePeople(CrowdType type)
@@ -99,6 +104,17 @@ public class CrowdTile : MonoBehaviour
         }
         return null;
     }
+    public bool HaveCrowd(CrowdType type)
+    {
+        foreach (var v in crowds)
+        {
+            if (v.type == type)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public void RepositionPeople()
     {
@@ -123,10 +139,13 @@ public class CrowdTile : MonoBehaviour
         }
         if (Complete)
         {
-            GameManager.instance.TileCompleted(this);            
+            this.wait(() =>
+            {
+                GameManager.instance.TileCompleted(this);
+            }, 0.5f);
         }
     }
-    void DestroySelf()
+    public void DestroySelf()
     {
         ParentCell.TileMoved(this);
         PoolManager.ReturnPeople(peoples);
@@ -154,19 +173,17 @@ public class CrowdTile : MonoBehaviour
         }
         transform.localPosition = Vector3.zero;
         transform.localRotation = Quaternion.Euler(0, 0, 0);
-        GameManager.instance.CheckForShorting(this);
-    }
-
-
-    public bool HaveCrowd(CrowdType type)
-    {
-        foreach (var v in crowds)
+        if (!Complete)
         {
-            if (v.type == type)
-            {
-                return true;
-            }
+            GameManager.instance.CheckForShorting(this);
         }
-        return false;
+        if(ParentCell.Type == CellType.Boat)
+        {
+            ParentCell.BoatFilled();
+        }
+    }
+    public void setPriority(CrowdType type)
+    {
+        Priority = type;
     }
 }

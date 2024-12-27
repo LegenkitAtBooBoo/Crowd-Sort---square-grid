@@ -22,10 +22,9 @@ public class GameManager : Singleton<GameManager>
     public Vector2Int GridSize;
     public Vector2 CellSize;
     public Vector2 PeoplePadding;
+    public Vector3Int BoatCount;
     [SerializeField] GameObject CellObj;
     [SerializeField] GameObject crowdTile;
-    GridCell GeneratorCell;
-    GridCell ProviderCell;
     #endregion
 
     #region Colleciton
@@ -35,11 +34,11 @@ public class GameManager : Singleton<GameManager>
 
     public List<GridCell> StorageCells = new List<GridCell>();
     public List<CrowdTile> CompletedTile = new List<CrowdTile>();
+    public List<CrowdType> LevelRequirements = new List<CrowdType>();
     #endregion
 
     #region Properties
     public Vector2 PositionOffset;
-
     Vector3 MousePosition
     {
         get
@@ -66,6 +65,10 @@ public class GameManager : Singleton<GameManager>
         }
     }
 
+    GridCell LeftBoat { get; set; }
+    GridCell RightBoat { get; set; }
+    GridCell GeneratorCell { get; set; }
+    GridCell ProviderCell { get; set; }
     GridCell HoveredCell { get; set; } = null;
     CrowdTile ReadyTile => ProviderCell.Tile;
     CrowdTile GeneratedTile => GeneratorCell.Tile;
@@ -100,7 +103,6 @@ public class GameManager : Singleton<GameManager>
             Debug.Log(CellDic.Count + " - " + v.CellID.ToString());
         }
     }
-
     public void SubscribeCells(GridCell cell)
     {
         if (cell.Type == CellType.Storage)
@@ -118,13 +120,35 @@ public class GameManager : Singleton<GameManager>
                 GeneratorCell = cell;
             }
         }
+        if (cell.Type == CellType.Boat)
+        {
+            if (cell.SetID(CellSize, PositionOffset).x < 0)
+            {
+                LeftBoat = cell;
+            }
+            else
+            {
+                RightBoat = cell;
+            }
+        }
     }
     private void Start()
     {
+        GenerateLevel();
         SpawnTile(true);
         StorageCells.Sort((a, b) => a.CellID.x - b.CellID.x);
     }
-
+    void GenerateLevel()
+    {
+        LevelRequirements.Clear();
+        int x = Random.Range(BoatCount.x, BoatCount.y + 1);
+        x -= x % BoatCount.z;
+        for (int y = 0; y < x; y++)
+        {
+            LevelRequirements.Add(CrowdsInLevel[Random.Range(0, CrowdsInLevel.Count)]);
+        }
+        ChangeBoats();
+    }
     #endregion
 
     #region Updation
@@ -185,21 +209,10 @@ public class GameManager : Singleton<GameManager>
     #endregion
 
     #region Shorting
-    public void CheckForShorting(CrowdTile tile)
+    public void CheckForShorting(CrowdTile tile, bool first = true)
     {
-        List<CrowdType> tempTypes = new List<CrowdType>();
-
-        for (int i = 0; i < tile.crowds.Count; i++)
-        {
-            tempTypes.Add(tile.crowds[i].type);
-        }
+        tile.setPriority(CrowdType.none);
         Vector2Int ID = tile.CellID;
-        for (int i = 0; i < tempTypes.Count; i++)
-        {
-            checkNeighbourForCrowd(ID, tempTypes[i]);
-        }
-        tile.RepositionPeople();
-        tile.CheckStatus();
         Vector2Int neighbourID;
         foreach (var v in NeighboutSet)
         {
@@ -210,9 +223,45 @@ public class GameManager : Singleton<GameManager>
             }
             if (CellDic[neighbourID].Tile != null)
             {
-                CellDic[neighbourID].Tile.RepositionPeople();
-                CellDic[neighbourID].Tile.CheckStatus();
+                CellDic[neighbourID].Tile.setPriority(CrowdType.none);
             }
+        }
+
+        List<CrowdType> tempTypes = new List<CrowdType>();
+
+        for (int i = 0; i < tile.crowds.Count; i++)
+        {
+            tempTypes.Add(tile.crowds[i].type);
+        }
+        for (int i = 0; i < tempTypes.Count; i++)
+        {
+            checkNeighbourForCrowd(ID, tempTypes[i]);
+        }
+        if (!first)
+        {
+            tile.RepositionPeople();
+            tile.CheckStatus();
+            foreach (var v in NeighboutSet)
+            {
+                neighbourID = ID + v;
+                if (!CellDic.ContainsKey(neighbourID))
+                {
+                    continue;
+                }
+                if (CellDic[neighbourID].Tile != null)
+                {
+                    CellDic[neighbourID].Tile.RepositionPeople();
+                    CellDic[neighbourID].Tile.CheckStatus();
+                }
+            }
+        }
+
+        if (first)
+        {
+            this.waitFrame(() =>
+            {
+                CheckForShorting(tile, false);
+            }, 2);
         }
     }
     void checkNeighbourForCrowd(Vector2Int ID, CrowdType type)
@@ -253,32 +302,34 @@ public class GameManager : Singleton<GameManager>
                 }
             }
         }
-        /*CrowdTile DominentTile = AplicableTiles[0];
-        AplicableTiles.RemoveAt(0);
-
-        if (DominentTile != CellDic[ID].Tile)
-        {
-            AplicableTiles.Remove(CellDic[ID].Tile);
-            AplicableTiles.Insert(0, CellDic[ID].Tile);
-        }
-        DominentTile.TakeCrowdFrom(AplicableTiles, type);*/
+        AplicableTiles[0].setPriority(type);
         Sort(AplicableTiles, CellDic[ID].Tile, type);
     }
     bool PriorityForExchange(CrowdTile cell1, CrowdTile cell2, CrowdTile mainCell, CrowdType type)
     {
         int crowd1 = cell1.crowds.Count;
         int crowd2 = cell2.crowds.Count;
-        if (crowd1 < crowd2)
+        if (crowd1 < crowd2 && cell1.Priority == CrowdType.none)
         {
             return true;
         }
-        if (crowd1 == 1 && crowd2 == 1 && cell2 == mainCell)
+        if (crowd1 == crowd2)
         {
-            return true;
-        }
-        if (crowd1 == 1 && crowd2 == 1 && cell1.crowds[0].amount > cell2.crowds[0].amount)
-        {
-            return true;
+            if (crowd1 == 1)
+            {
+                if (cell2 == mainCell)
+                {
+                    return true;
+                }
+                if (cell1.crowds[0].amount > cell2.crowds[0].amount)
+                {
+                    return true;
+                }
+            }
+            if (cell1.Priority == CrowdType.none)
+            {
+                return true;
+            }
         }
         return false;
     }
@@ -334,14 +385,74 @@ public class GameManager : Singleton<GameManager>
         return Temp;
     }
 
+    public void ChangeBoats()
+    {
+        if (LeftBoat.BoatType == CrowdType.none && LevelRequirements.Count>0)
+        {
+            LeftBoat.InitializeBoat(LevelRequirements[0]);
+            LevelRequirements.RemoveAt(0);
+        }
+        if (RightBoat.BoatType == CrowdType.none && LevelRequirements.Count>0)
+        {
+            RightBoat.InitializeBoat(LevelRequirements[0]);
+            LevelRequirements.RemoveAt(0);
+        }
+        LeftBoat.gameObject.SetActive(LeftBoat.BoatType != CrowdType.none);
+        RightBoat.gameObject.SetActive(RightBoat.BoatType != CrowdType.none);
+        FillBoatFromStorage();
+    }
+
     public void TileCompleted(CrowdTile tile)
     {
         if (CompletedTile.Count == StorageCells.Count || CompletedTile.Contains(tile))
         {
             return;
         }
-        StorageCells[CompletedTile.Count].TakeCrowdTile(tile);
-        CompletedTile.Add(tile);
+        if (FillUpBoat(tile))
+        {
+            return;
+        }
+        if (!FillStorage(tile))
+        {
+            // level fail
+        }
+    }
+    bool FillUpBoat(CrowdTile tile)
+    {
+        if (LeftBoat.BoatType == tile.crowds[0].type)
+        {
+            LeftBoat.TakeCrowdTile(tile);
+            return true;
+        }
+        if (RightBoat.BoatType == tile.crowds[0].type)
+        {
+            RightBoat.TakeCrowdTile(tile);
+            return true;
+        }
+        return false;
+    }
+    bool FillStorage(CrowdTile tile)
+    {
+        foreach (var cell in StorageCells)
+        {
+            if (cell.Available)
+            {
+                cell.TakeCrowdTile(tile);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void FillBoatFromStorage()
+    {
+        foreach (var cell in StorageCells)
+        {
+            if (!cell.Available)
+            {
+                FillUpBoat(cell.Tile);
+            }
+        }
     }
     #endregion
 }
