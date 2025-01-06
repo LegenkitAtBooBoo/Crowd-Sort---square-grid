@@ -171,13 +171,17 @@ public class CrowdTile : MonoBehaviour
             t += Time.deltaTime / duration;
             yield return null;
         }
+        foreach (var v in peoples)
+        {
+            v.transform.rotation = Quaternion.Euler(0, 0, 0);
+        }
         transform.localPosition = Vector3.zero;
         transform.localRotation = Quaternion.Euler(0, 0, 0);
         if (!Complete)
         {
             GameManager.instance.CheckForShorting(this);
         }
-        if(ParentCell.Type == CellType.Boat)
+        if (ParentCell.Type == CellType.Boat)
         {
             ParentCell.BoatFilled();
         }

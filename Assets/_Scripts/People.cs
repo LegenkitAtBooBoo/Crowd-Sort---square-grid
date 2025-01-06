@@ -5,8 +5,19 @@ using UnityEngine;
 public class People : MonoBehaviour
 {
     public MeshRenderer PeopleRenderer;
-    public CrowdType Type {  get; private set; }
-    
+    public Animator animator;
+    public CrowdType Type { get; private set; }
+
+    private void OnEnable()
+    {
+        var state = animator.GetCurrentAnimatorStateInfo(0);
+        animator.Play(state.fullPathHash, 0, Random.Range(0f, 1f));
+        animator.SetFloat("Speed", Random.Range(0.7f, 1.3f));
+        /*animator.enabled = false;
+        float delay = Random.Range(0f, 1.5f);
+        Invoke("EnableAnimator", delay);*/
+    }
+
     public void Init(CrowdType type)
     {
         Type = type;
@@ -17,7 +28,7 @@ public class People : MonoBehaviour
         transform.parent = parent;
         transform.localPosition = position;
     }
-    public void MoveTo(Transform parent,Vector3 position)
+    public void MoveTo(Transform parent, Vector3 position)
     {
         transform.parent = parent;
         StartCoroutine(Reposition(position));
@@ -36,7 +47,7 @@ public class People : MonoBehaviour
         {
             Vector3 pos = Vector3.Lerp(start, target, t);
             transform.localPosition = pos;
-            transform.LookAt(transform.parent,Vector3.up);
+            transform.LookAt(transform.parent, Vector3.up);
             t += Time.deltaTime / duration;
             yield return null;
         }
