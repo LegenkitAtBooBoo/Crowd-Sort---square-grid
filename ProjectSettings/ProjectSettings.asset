@@ -807,7 +807,24 @@ PlayerSettings:
   webGLMemoryGeometricGrowthStep: 0.2
   webGLMemoryGeometricGrowthCap: 96
   webGLPowerPreference: 2
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    Android: EPO_DOTWEEN;URP_OUTLINE
+    EmbeddedLinux: EPO_DOTWEEN;URP_OUTLINE
+    GameCoreScarlett: EPO_DOTWEEN;URP_OUTLINE
+    GameCoreXboxOne: EPO_DOTWEEN;URP_OUTLINE
+    LinuxHeadlessSimulation: EPO_DOTWEEN;URP_OUTLINE
+    Nintendo Switch: EPO_DOTWEEN;URP_OUTLINE
+    PS4: EPO_DOTWEEN;URP_OUTLINE
+    PS5: EPO_DOTWEEN;URP_OUTLINE
+    QNX: EPO_DOTWEEN;URP_OUTLINE
+    Stadia: EPO_DOTWEEN;URP_OUTLINE
+    Standalone: URP_OUTLINE
+    VisionOS: EPO_DOTWEEN;URP_OUTLINE
+    WebGL: EPO_DOTWEEN;URP_OUTLINE
+    Windows Store Apps: EPO_DOTWEEN;URP_OUTLINE
+    XboxOne: EPO_DOTWEEN;URP_OUTLINE
+    iPhone: EPO_DOTWEEN;URP_OUTLINE
+    tvOS: EPO_DOTWEEN;URP_OUTLINE
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend: {}
